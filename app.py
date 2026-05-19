@@ -8,7 +8,7 @@ import re
 from datetime import datetime
 
 # --- 1. CONFIGURACIÓN DE PÁGINA ---
-st.set_page_config(page_title="SGA Pro v64.0", layout="wide", page_icon="🛡️")
+st.set_page_config(page_title="SGA Pro v65.0", layout="wide", page_icon="🛡️")
 
 # --- 2. CONEXIÓN A LA IA (SEGURA) ---
 ia_conectada = False
@@ -22,20 +22,22 @@ if "gemini_key" in st.secrets:
 
 # --- 3. BASE DE DATOS LOCAL ---
 def conectar():
-    return sqlite3.connect('sga_sistema_v64.db', check_same_thread=False)
+    return sqlite3.connect('sga_sistema_v65.db', check_same_thread=False)
 
 def inicializar_db():
-    conn = conectar(); c = conn.cursor()
+    conn = conectar()
+    c = conn.cursor()
     # Tabla de Auditoría (Escáner)
     c.execute('''CREATE TABLE IF NOT EXISTS auditoria 
                  (id INTEGER PRIMARY KEY AUTOINCREMENT, fecha TEXT, tujo REAL, mina REAL, bs REAL, obs TEXT)''')
     # Tabla de Personal
     c.execute('''CREATE TABLE IF NOT EXISTS personal 
                  (id INTEGER PRIMARY KEY AUTOINCREMENT, nombre TEXT, ci TEXT UNIQUE, cargo TEXT)''')
-    # Tabla de Vales
+    # Tabla de Vales (Comillas revisadas y corregidas)
     c.execute('''CREATE TABLE IF NOT EXISTS vales 
                  (id INTEGER PRIMARY KEY AUTOINCREMENT, socio TEXT, monto REAL, fecha TEXT, concepto TEXT)''')
-    conn.commit(); conn.close()
+    conn.commit()
+    conn.close()
 
 inicializar_db()
 
@@ -84,7 +86,8 @@ elif menu == "👥 2. Registro de Personal":
                 try:
                     conn = conectar()
                     conn.execute("INSERT INTO personal (nombre, ci, cargo) VALUES (?,?,?)", (nombre, ci, cargo))
-                    conn.commit(); conn.close()
+                    conn.commit()
+                    conn.close()
                     st.success(f"✅ {nombre} registrado correctamente.")
                 except:
                     st.error("Error: El CI ya existe en la base de datos.")
@@ -116,7 +119,7 @@ elif menu == "⛏️ 3. Escáner IA (Auditoría)":
                         
                         instruccion = "Extract the table from the image. Return ONLY a JSON list of objects with keys: fecha, tujo, mina, bs, obs. Do not include markdown formatting or extra text."
                         
-                        # Forzamos la versión v1 de la API para saltar el error 404
+                        # Parche explícito v1 para evitar el error 404
                         from google.generativeai.types import RequestOptions
                         response = model.generate_content(
                             contents=[instruccion, {'mime_type': 'image/jpeg', 'data': img_byte_arr.getvalue()}],
@@ -147,4 +150,20 @@ elif menu == "💰 4. Vales y Adelantos":
         if st.form_submit_button("Registrar Vale"):
             if socio != "No hay socios registrados":
                 conn = conectar()
-                conn.execute("INSERT INTO vales (socio, monto, fecha, concepto) VALUES (?,?,?,?)", (socio, monto, str(fecha
+                # CORREGIDO: Sintaxis limpia y blindada en la inserción de vales
+                conn.execute("INSERT INTO vales (socio, monto, fecha, concepto) VALUES (?,?,?,?)", (socio, monto, str(fecha), concepto))
+                conn.commit()
+                conn.close()
+                st.success("Vale registrado con éxito.")
+            else:
+                st.error("No puedes registrar un vale sin un socio válido.")
+
+elif menu == "📖 5. Libro Diario Central":
+    st.title("📖 Libro Diario Central")
+    st.subheader("Registros del Escáner (Auditoría)")
+    df_aud = pd.read_sql_query("SELECT * FROM auditoria", conectar())
+    st.dataframe(df_aud, use_container_width=True)
+    
+    st.subheader("Registros de Vales")
+    df_val = pd.read_sql_query("SELECT * FROM vales", conectar())
+    st.dataframe(df_val, use_container_width=True)
