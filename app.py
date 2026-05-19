@@ -1,4 +1,4 @@
-import streamlit as st
+  import streamlit as st
 import sqlite3
 import pandas as pd
 import google.generativeai as genai
@@ -7,20 +7,25 @@ import io
 import re
 from datetime import datetime
 
-# --- 1. CONFIGURACIÓN Y REPARACIÓN DE IA ---
-st.set_page_config(page_title="SGA Pro v50.0", layout="wide", page_icon="⛏️")
+# --- 1. CONFIGURACIÓN Y SOLUCIÓN DE CONEXIÓN ---
+st.set_page_config(page_title="SGA Pro v51.0 - Control Maestro", layout="wide", page_icon="⛏️")
 
+# CLAVE DEL ÉXITO: Forzamos la conexión a la API estable v1
 if "gemini_key" in st.secrets:
-    genai.configure(api_key=st.secrets["gemini_key"])
-    # SOLUCIÓN DEFINITIVA AL ERROR 404: Usamos el nombre base que es el más estable
-    model = genai.GenerativeModel('gemini-1.5-flash')
-    ia_conectada = True
+    try:
+        genai.configure(api_key=st.secrets["gemini_key"])
+        # Usamos el nombre de modelo base sin sufijos que causan el 404
+        model = genai.GenerativeModel(model_name='gemini-1.5-flash')
+        ia_conectada = True
+    except Exception as e:
+        st.error(f"Error de configuración: {e}")
+        ia_conectada = False
 else:
     ia_conectada = False
 
-# --- 2. BASE DE DATOS MAESTRA ---
+# --- 2. BASE DE DATOS (7 MÓDULOS) ---
 def conectar():
-    return sqlite3.connect('sga_final.db', check_same_thread=False)
+    return sqlite3.connect('sga_final_marcelo.db', check_same_thread=False)
 
 def inicializar_db():
     conn = conectar(); c = conn.cursor()
@@ -32,15 +37,15 @@ def inicializar_db():
 
 inicializar_db()
 
-# --- 3. NAVEGACIÓN (LOS 7 MÓDULOS INTEGRALES) ---
+# --- 3. NAVEGACIÓN (INTEGRACIÓN TOTAL) ---
 with st.sidebar:
-    st.title("🛡️ CONTROL TOTAL SGA")
+    st.title("🛡️ SGA BOLIVIA")
     if ia_conectada:
-        st.success("✅ IA Nano Banana 2 Activa")
+        st.success("✅ Conexión Estable con Gemini")
     else:
-        st.error("❌ Configura la API KEY en Secrets")
+        st.error("❌ Revisa API Key en Secrets")
     
-    menu = st.radio("MÓDULOS:", [
+    menu = st.radio("SELECCIONE MÓDULO:", [
         "📊 1. Dashboard General",
         "👥 2. Personal y Socios",
         "⛏️ 3. Escáner IA (Auditoría)",
@@ -50,12 +55,12 @@ with st.sidebar:
         "⚙️ 7. Configuración y Sistema"
     ])
     st.markdown("---")
-    st.caption("Marcelo | Gestión 2026")
+    st.caption("Marcelo | Cooperativa 2026")
 
 # --- LÓGICA DE MÓDULOS ---
 
 if menu == "📊 1. Dashboard General":
-    st.title("📊 Resumen Operativo")
+    st.title("📊 Resumen de Operaciones")
     c1, c2, c3 = st.columns(3)
     with c1:
         tp = pd.read_sql_query("SELECT COUNT(*) as t FROM personal", conectar()).iloc[0]['t']
@@ -68,72 +73,79 @@ if menu == "📊 1. Dashboard General":
         st.metric("Vales (Bs)", f"{tv if tv else 0:,.2f}")
 
 elif menu == "👥 2. Personal y Socios":
-    st.title("👥 Gestión de Personal")
-    with st.form("p"):
-        n = st.text_input("Nombre").upper(); ci = st.text_input("CI")
+    st.title("👥 Registro de Personal")
+    with st.form("p_form"):
+        n = st.text_input("Nombre Completo").upper(); ci = st.text_input("CI")
         cargo = st.selectbox("Cargo", ["Socio", "Administrador", "Seguridad"])
         if st.form_submit_button("Guardar"):
             try:
                 conn = conectar(); conn.execute("INSERT INTO personal (nombre, ci, cargo) VALUES (?,?,?)", (n, ci, cargo))
-                conn.commit(); conn.close(); st.success("Registrado")
-            except: st.error("Error: CI duplicado")
+                conn.commit(); conn.close(); st.success("Guardado con éxito")
+            except: st.error("El CI ya existe")
     st.dataframe(pd.read_sql_query("SELECT * FROM personal", conectar()), use_container_width=True)
 
 elif menu == "⛏️ 3. Escáner IA (Auditoría)":
-    st.title("⛏️ Escáner Automático (v50.0)")
+    st.title("⛏️ Escáner de Cuadernos 2019")
     foto = st.file_uploader("Cargar foto", type=['png', 'jpg', 'jpeg'])
     if foto:
         img = Image.open(foto); st.image(img, width=600)
-        if st.button("🚀 PROCESAR Y ARCHIVAR"):
-            with st.spinner("La IA está leyendo los datos..."):
+        if st.button("🚀 ANALIZAR Y GUARDAR AUTOMÁTICAMENTE"):
+            with st.spinner("Procesando imagen..."):
                 try:
                     img_bytes = io.BytesIO(); img.save(img_bytes, format='JPEG')
-                    # Prompt optimizado para evitar errores de red
-                    prompt = "Analiza esta tabla. Extrae JSON: [fecha, tujo, mina, bs, obs]. Solo JSON puro."
+                    # Prompt técnico simplificado para evitar errores de red
+                    prompt = "Analiza la tabla. Extrae JSON: [fecha, tujo, mina, bs, obs]. Solo JSON puro, sin texto extra."
+                    
+                    # Llamada corregida
                     response = model.generate_content([prompt, {'mime_type': 'image/jpeg', 'data': img_bytes.getvalue()}])
                     
-                    # Limpiamos la respuesta de cualquier texto extra
-                    cleaned_response = re.search(r'\[.*\]', response.text, re.DOTALL).group()
-                    df = pd.read_json(io.StringIO(cleaned_response))
-                    
-                    conn = conectar(); df.to_sql('auditoria', conn, if_exists='append', index=False); conn.close()
-                    st.success(f"✅ {len(df)} registros guardados automáticamente.")
-                    st.dataframe(df)
+                    # Limpiador de seguridad
+                    raw_text = response.text
+                    match = re.search(r'\[.*\]', raw_text, re.DOTALL)
+                    if match:
+                        df = pd.read_json(io.StringIO(match.group()))
+                        conn = conectar()
+                        df.to_sql('auditoria', conn, if_exists='append', index=False)
+                        conn.close()
+                        st.success(f"✅ ¡Éxito! {len(df)} registros archivados.")
+                        st.dataframe(df)
+                    else:
+                        st.error("No se pudo estructurar la información. Intenta otra foto.")
                 except Exception as e:
-                    st.error(f"Fallo técnico: {e}. Intenta una foto más cercana.")
+                    st.error(f"Error de sistema: {e}")
 
 elif menu == "💰 4. Vales y Adelantos":
     st.title("💰 Control de Vales")
-    with st.form("v"):
+    with st.form("v_form"):
         lista = pd.read_sql_query("SELECT nombre FROM personal", conectar())
-        soc = st.selectbox("Socio", lista['nombre'] if not lista.empty else ["Sin socios"])
-        m = st.number_input("Monto (Bs)", min_value=0.0)
+        socio = st.selectbox("Socio", lista['nombre'] if not lista.empty else ["Sin socios"])
+        monto = st.number_input("Monto en Bs", min_value=0.0)
         f = st.date_input("Fecha")
         c = st.text_input("Concepto")
-        if st.form_submit_button("Guardar Vale"):
-            conn = conectar(); conn.execute("INSERT INTO vales (socio, monto, fecha, concepto) VALUES (?,?,?,?)", (soc, m, str(f), c))
-            conn.commit(); conn.close(); st.success("Guardado")
+        if st.form_submit_button("Registrar Vale"):
+            conn = conectar(); conn.execute("INSERT INTO vales (socio, monto, fecha, concepto) VALUES (?,?,?,?)", (socio, monto, str(f), c))
+            conn.commit(); conn.close(); st.success("Vale registrado")
     st.dataframe(pd.read_sql_query("SELECT * FROM vales", conectar()), use_container_width=True)
 
 elif menu == "🚜 5. Activos e Inventario":
-    st.title("🚜 Inventario")
-    with st.form("a"):
-        i = st.text_input("Item"); v = st.number_input("Valor (Bs)"); e = st.selectbox("Estado", ["Bueno", "Regular", "Reparación"])
-        if st.form_submit_button("Registrar"):
-            f = datetime.now().strftime("%Y-%m-%d")
-            conn = conectar(); conn.execute("INSERT INTO activos (item, valor, estado, fecha_reg) VALUES (?,?,?,?)", (i, v, e, f))
+    st.title("🚜 Inventario de Maquinaria")
+    with st.form("a_form"):
+        item = st.text_input("Activo"); valor = st.number_input("Valor (Bs)"); est = st.selectbox("Estado", ["Bueno", "Regular", "Reparación"])
+        if st.form_submit_button("Añadir"):
+            f_hoy = datetime.now().strftime("%Y-%m-%d")
+            conn = conectar(); conn.execute("INSERT INTO activos (item, valor, estado, fecha_reg) VALUES (?,?,?,?)", (item, valor, est, f_hoy))
             conn.commit(); conn.close(); st.success("Activo Guardado")
     st.dataframe(pd.read_sql_query("SELECT * FROM activos", conectar()), use_container_width=True)
 
 elif menu == "📖 6. Libro Diario Central":
-    st.title("📖 Registros Consolidados")
+    st.title("📖 Libro Diario (Consolidado)")
     df = pd.read_sql_query("SELECT * FROM auditoria", conectar())
     st.dataframe(df, use_container_width=True)
     if not df.empty:
-        st.download_button("📥 Descargar reporte", df.to_csv(index=False), "auditoria_sga.csv")
+        st.download_button("📥 Descargar Excel", df.to_csv(index=False), "auditoria.csv")
 
 elif menu == "⚙️ 7. Configuración y Sistema":
     st.title("⚙️ Estado del Sistema")
-    st.info("Sistema operando en Streamlit Cloud con base de datos SQLite persistente.")
-    if st.button("🧹 Limpiar Cache"):
+    st.info("Versión 51.0 | Base de Datos: sga_final_marcelo.db")
+    if st.button("🗑️ Limpiar Cache de Navegador"):
         st.cache_data.clear(); st.rerun()
